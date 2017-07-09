@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from slam.utils import normalize_angle
 
@@ -31,8 +32,53 @@ class ParticleFilter:
             pose = self.motion_model(pose, command, noise, self.sampler)
             self.particles[i] = (weight, np.copy(pose))
 
-    def correct(self, measurements):
-        pass
+    def correct(self, measurements, sensor_noise, landmark_map):
+        normalizer = 0
+        for i, particle in enumerate(self.particles):
+            weight, pose = particle
+            rx = pose.item(0)
+            ry = pose.item(1)
+            rtheta = pose.item(2)
+
+            vrange, vbearing = sensor_noise
+
+            Zdiff = np.matrix([])
+            for reading in measurements:
+                lid, srange, sbearing = reading
+                z_measured = np.matrix([srange, sbearing]).T
+
+                lx, ly = landmark_map.get(lid)
+
+                dx = lx - rx
+                dy = ly - ry
+
+                delta = np.matrix([dx, dy]).T
+                q = delta.T * delta
+                z_expected = np.matrix([
+                    math.sqrt(q),
+                    normalize_angle(np.arctan2(dy, dx) - rtheta)
+                ]).T
+
+                # Difference between measured and expected
+                diff = z_measured - z_expected
+                diff[1] = normalize_angle(diff.item(1))
+                Zdiff = np.concatenate((Zdiff, diff)) if Zdiff.size else np.copy(diff)
+
+            # Making sensor noise matrix with different diagonal elements
+            Qdiag = np.array(
+                [[vrange, vbearing] for i in range(len(measurements))]
+            )
+            # Flatten the array
+            Qdiag.shape = (len(sensor_noise) * len(measurements), )
+            Qt = np.diag(Qdiag)
+            # Qt = np.eye(Zdiff.shape[0]) * 0.1
+
+            new_weight = math.exp(-1/2 * Zdiff.T * np.linalg.pinv(Qt) * Zdiff)
+
+            normalizer = normalizer + new_weight
+            self.particles[i] = (new_weight, np.copy(pose))
+
+        self.particles = [(weight/normalizer, pose) for weight, pose in self.particles]
 
     def resample(self):
         self.particles = self.resampler(self.particles)
@@ -42,12 +88,13 @@ def low_variance_resampling(particles):
     new_particles = []
 
     Jinv = 1 / len(particles)
-    r = np.random.normal(0, Jinv)
+    r = np.random.uniform(0, Jinv)
     # weight
     c = particles[0][0]
-    i = 1
+    i = 0
     for j in range(0, len(particles)):
-        U = r + (j - 1) * Jinv
+        # Or j-1 if out of range
+        U = r + (j) * Jinv
         while U > c:
             i = i + 1
             c = c + particles[i][0]
