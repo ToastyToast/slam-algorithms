@@ -42,9 +42,11 @@ class ParticleFilter:
 
             vrange, vbearing = sensor_noise
 
+            # Matrix of measurement differences
             Zdiff = np.matrix([])
             for reading in measurements:
                 lid, srange, sbearing = reading
+                # Sensor measurement
                 z_measured = np.matrix([srange, sbearing]).T
 
                 lx, ly = landmark_map.get(lid)
@@ -54,14 +56,16 @@ class ParticleFilter:
 
                 delta = np.matrix([dx, dy]).T
                 q = delta.T * delta
+                # Expected (predicted) measurement
                 z_expected = np.matrix([
                     math.sqrt(q),
                     normalize_angle(np.arctan2(dy, dx) - rtheta)
                 ]).T
 
                 # Difference between measured and expected
-                diff = z_measured - z_expected
+                diff = z_expected - z_measured
                 diff[1] = normalize_angle(diff.item(1))
+                # Collect all measurement differences
                 Zdiff = np.concatenate((Zdiff, diff)) if Zdiff.size else np.copy(diff)
 
             # Making sensor noise matrix with different diagonal elements
@@ -73,7 +77,10 @@ class ParticleFilter:
             Qt = np.diag(Qdiag)
             # Qt = np.eye(Zdiff.shape[0]) * 0.1
 
-            new_weight = math.exp(-1/2 * Zdiff.T * np.linalg.pinv(Qt) * Zdiff)
+            # Normal distribution is probably a good idea 
+            # Highest weight when (z_expected - z_measured) is 0
+            denom = 1 / math.sqrt( np.linalg.det(2*math.pi*Qt) )
+            new_weight = denom * math.exp(-1/2 * Zdiff.T * np.linalg.pinv(Qt) * Zdiff)
 
             normalizer = normalizer + new_weight
             self.particles[i] = (new_weight, np.copy(pose))
