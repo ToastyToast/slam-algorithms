@@ -7,9 +7,10 @@ def odometry_command(pose, command):
     rot1, trans, rot2 = command
     theta_old = normalize_angle(pose.item(2))
 
+    normalized = normalize_angle(theta_old + rot1)
     update_vec = np.matrix([
-        trans * math.cos(theta_old + rot1),
-        trans * math.sin(theta_old + rot1),
+        trans * math.cos(normalized),
+        trans * math.sin(normalized),
         normalize_angle(rot1 + rot2)
     ]).T
 
