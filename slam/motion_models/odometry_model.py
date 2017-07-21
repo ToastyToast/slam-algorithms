@@ -1,6 +1,6 @@
 import numpy as np
 import math
-from prob_rob.utils import normalize_angle
+from slam.utils import normalize_angle
 
 
 def odometry_command(pose, command):
