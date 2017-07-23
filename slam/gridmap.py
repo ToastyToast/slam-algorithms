@@ -55,7 +55,23 @@ class GridMap:
         self._grid_map = np.ones(self._map_size).T * log_odds_prior
 
     def inv_sensor_model(self, scan, pose):
-        return self._grid_map, [], []
+        map_update = np.zeros(self._grid_map.shape)
+        rob_trans = GridMap.vector2transform2D(pose)
+
+        rob_pose_map_frame = GridMap.world_to_map_coordinates(
+            pose[0:2, :], self._grid_size, self._offset
+        )
+
+        laser_end_points = GridMap.laser_as_cartesian(scan, 30)
+        laser_end_points = rob_trans * laser_end_points
+
+        laser_end_map_frame = GridMap.world_to_map_coordinates(
+            laser_end_points[0:2, :], self._grid_size, self._offset
+        )
+
+        print(laser_end_map_frame.shape)
+
+        return map_update, [], []
 
     @staticmethod
     def laser_as_cartesian(rl, max_range=15):
@@ -67,10 +83,14 @@ class GridMap:
         s_angle = rl['start_angle'][0][0]
         a_res = rl['angular_resolution'][0][0]
         angles = np.linspace(s_angle, s_angle+num_beams*a_res, num_beams)[idx]
-        points = np.matrix([
-            [ranges[idx] * np.cos(angles)],
-            [ranges[idx] * np.sin(angles)],
-            [np.ones( (1, len(angles)) )]
+        ranges = ranges[idx]
+
+        cs = np.cos(angles)
+        sn = np.sin(angles)
+        points = np.vstack([
+            ranges * cs,
+            ranges * sn,
+            np.ones( (1, len(angles)) )
         ])
         transf = GridMap.vector2transform2D(rl['laser_offset'])
 
