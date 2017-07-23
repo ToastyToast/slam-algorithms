@@ -19,6 +19,7 @@ class GridMap:
         self._map_size = None
         self._grid_map = None
         self._poses = None
+        self._laser = None
 
         if laser_data:
             self.init_laser_from_mat(laser_data)
@@ -30,8 +31,8 @@ class GridMap:
         except FileNotFoundError:
             raise ValueError('Provide a laser scan .mat file')
 
-        laser = laser_content['laser']
-        poses = laser['pose'][0]
+        self._laser = laser_content['laser']
+        poses = self._laser['pose'][0]
         # convert to (N, M) matrix instead of (N, )
         self._poses = np.matrix([arr[0].tolist() for arr in poses])
 
@@ -52,6 +53,28 @@ class GridMap:
 
         log_odds_prior = GridMap.prob2log(self._prior)
         self._grid_map = np.ones(self._map_size).T * log_odds_prior
+
+    def inv_sensor_model(self, scan, pose):
+        return self._grid_map, [], []
+
+    @staticmethod
+    def laser_as_cartesian(rl, max_range=15):
+        ranges = rl['ranges'][0]
+        num_beams = len(ranges)
+        max_range = min(max_range, rl['maximum_range'][0][0])
+        idx = (ranges < max_range) & (ranges > 0)
+
+        s_angle = rl['start_angle'][0][0]
+        a_res = rl['angular_resolution'][0][0]
+        angles = np.linspace(s_angle, s_angle+num_beams*a_res, num_beams)[idx]
+        points = np.matrix([
+            [ranges[idx] * np.cos(angles)],
+            [ranges[idx] * np.sin(angles)],
+            [np.ones( (1, len(angles)) )]
+        ])
+        transf = GridMap.vector2transform2D(rl['laser_offset'])
+
+        return transf * points
 
     @staticmethod
     def log2prob(l):
@@ -75,3 +98,21 @@ class GridMap:
 
         return map_points
 
+    @staticmethod
+    def vector2transform2D(vector):
+        angle = vector[2][0]
+        cs = math.cos(angle)
+        sn = math.sin(angle)
+        return np.matrix([
+            [cs, -sn, vector[0]],
+            [sn, cs, vector[1]],
+            [0, 0, 1]
+        ])
+
+    @staticmethod
+    def transform2vector2D(t):
+        return np.matrix([
+            [t[0, 2]],
+            [t[1, 2]],
+            [np.arctan2(t[1, 0], t[0, 0])]
+        ])
