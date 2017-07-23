@@ -8,7 +8,7 @@ class GridMap:
     def __init__(self, laser_data='', grid_size=0.5, border=30):
         # Default 
         self._prior = 0.5
-        self._prob_coc = 0.9
+        self._prob_occ = 0.9
         self._prob_free = 0.35
 
         self._border = border
@@ -58,7 +58,7 @@ class GridMap:
         map_update = np.zeros(self._grid_map.shape)
         rob_trans = GridMap.vector2transform2D(pose)
 
-        rob_pose_map_frame = GridMap.world_to_map_coordinates(
+        robot_pose_map_frame = GridMap.world_to_map_coordinates(
             pose[0:2, :], self._grid_size, self._offset
         )
 
@@ -69,9 +69,22 @@ class GridMap:
             laser_end_points[0:2, :], self._grid_size, self._offset
         )
 
-        print(laser_end_map_frame.shape)
+        for col in range(laser_end_map_frame.shape[1]):
+            rx = int(robot_pose_map_frame.item(0))
+            ry = int(robot_pose_map_frame.item(1))
+            lx = int(laser_end_map_frame.item((0, col)))
+            ly = int(laser_end_map_frame.item((1, col)))
 
-        return map_update, [], []
+            bres_points = bresenham_line((rx, ry), (lx, ly))
+            for point in bres_points:
+                px, py = point
+                map_update[py, px] = self._grid_map[py, px] + \
+                    GridMap.prob2log(self._prob_free)
+
+            map_update[py, px] = self._grid_map[py, px] + \
+                GridMap.prob2log(self._prob_occ)
+
+        return map_update, robot_pose_map_frame, laser_end_map_frame
 
     @staticmethod
     def laser_as_cartesian(rl, max_range=15):
