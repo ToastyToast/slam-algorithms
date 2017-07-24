@@ -4,6 +4,41 @@ import scipy.io as sio
 from slam.utils import bresenham_line
 
 
+class LaserMatlabDataHelper:
+    def __init__(self, filename):
+        self.filename = filename
+        laser_content = None
+        try:
+            laser_content = sio.loadmat(filename)
+        except FileNotFoundError:
+            raise ValueError('Provide a laser scan .mat file')
+
+        self._laser = laser_content['laser']
+        self._poses = np.asmatrix(np.vstack(self._laser['pose'][0]))
+
+    @property
+    def poses(self):
+        return self._poses
+
+    def get_pose_at(self, timestep):
+        return self._poses[timestep].T
+
+    def get_range_scan(self, timestamp):
+        range_scan = self._laser[0, timestamp]
+        ranges = range_scan['ranges'][0]
+        max_range = range_scan['maximum_range'][0][0]
+        start_angle = range_scan['start_angle'][0][0]
+        angular_res = range_scan['angular_resolution'][0][0]
+        laser_offset = np.asmatrix(range_scan['laser_offset'])
+
+        return {
+            'ranges': ranges,
+            'maximum_range': max_range,
+            'start_angle': start_angle,
+            'angular_resolution': angular_res,
+            'laser_offset': laser_offset
+        }
+
 class GridMap:
     def __init__(self, laser_data='', grid_size=0.5, border=30):
         # Default 
@@ -18,28 +53,18 @@ class GridMap:
         self._map_size_meters = None
         self._map_size = None
         self._grid_map = None
-        self._poses = None
         self._laser = None
 
         if laser_data:
             self.init_laser_from_mat(laser_data)
 
     def init_laser_from_mat(self, laser_filename):
-        laser_content = None
-        try:
-            laser_content = sio.loadmat(laser_filename)
-        except FileNotFoundError:
-            raise ValueError('Provide a laser scan .mat file')
+        self._laser = LaserMatlabDataHelper(laser_filename)
 
-        self._laser = laser_content['laser']
-        poses = self._laser['pose'][0]
-        # convert to (N, M) matrix instead of (N, )
-        self._poses = np.matrix([arr[0].tolist() for arr in poses])
-
-        pose_x_min = np.min(self._poses[:, 0])
-        pose_x_max = np.max(self._poses[:, 0])
-        pose_y_min = np.min(self._poses[:, 1])
-        pose_y_max = np.max(self._poses[:, 1])
+        pose_x_min = np.min(self._laser.poses[:, 0])
+        pose_x_max = np.max(self._laser.poses[:, 0])
+        pose_y_min = np.min(self._laser.poses[:, 1])
+        pose_y_max = np.max(self._laser.poses[:, 1])
 
         map_borders = (pose_x_min-self._border, pose_x_max+self._border,
                        pose_y_min-self._border, pose_y_max+self._border)
@@ -56,8 +81,8 @@ class GridMap:
 
     def inv_sensor_model(self, scan, pose):
         map_update = np.zeros(self._grid_map.shape)
-        rob_trans = GridMap.vector2transform2D(pose)
 
+        rob_trans = GridMap.vector2transform2D(pose)
         robot_pose_map_frame = GridMap.world_to_map_coordinates(
             pose[0:2, :], self._grid_size, self._offset
         )
@@ -86,15 +111,33 @@ class GridMap:
 
         return map_update, robot_pose_map_frame, laser_end_map_frame
 
+    def update_at_timestep(self, timestep):
+        robot_pose = self._laser.get_pose_at(timestep)
+        scan = self._laser.get_range_scan(timestep)
+
+        map_update, pose_map_frame, laser_map_frame = self.inv_sensor_model(
+            scan, robot_pose
+        )
+
+        log_odds_prior = GridMap.prob2log(self._prior)
+        map_update = map_update - log_odds_prior * np.ones(map_update.shape)
+        self._grid_map = self._grid_map + map_update
+
+    def get_prob_map(self):
+        return np.ones(self._grid_map.shape) - GridMap.log2prob(self._grid_map)
+
+    def get_timestep_list(self):
+        return list(range(len(self._laser.poses)))
+
     @staticmethod
     def laser_as_cartesian(rl, max_range=15):
-        ranges = rl['ranges'][0]
+        ranges = rl['ranges']
         num_beams = len(ranges)
-        max_range = min(max_range, rl['maximum_range'][0][0])
+        max_range = min(max_range, rl['maximum_range'])
         idx = (ranges < max_range) & (ranges > 0)
 
-        s_angle = rl['start_angle'][0][0]
-        a_res = rl['angular_resolution'][0][0]
+        s_angle = rl['start_angle']
+        a_res = rl['angular_resolution']
         angles = np.linspace(s_angle, s_angle+num_beams*a_res, num_beams)[idx]
         ranges = ranges[idx]
 
@@ -133,12 +176,12 @@ class GridMap:
 
     @staticmethod
     def vector2transform2D(vector):
-        angle = vector[2][0]
+        angle = vector.item(2)
         cs = math.cos(angle)
         sn = math.sin(angle)
         return np.matrix([
-            [cs, -sn, vector[0]],
-            [sn, cs, vector[1]],
+            [cs, -sn, vector.item(0)],
+            [sn, cs, vector.item(1)],
             [0, 0, 1]
         ])
 
@@ -149,3 +192,4 @@ class GridMap:
             [t[1, 2]],
             [np.arctan2(t[1, 0], t[0, 0])]
         ])
+
