@@ -4,7 +4,7 @@ import scipy.io as sio
 from slam.utils import bresenham_line
 
 
-class LaserMatlabDataHelper:
+class LaserDataMatlab:
     def __init__(self, filename):
         self.filename = filename
         laser_content = None
@@ -20,11 +20,14 @@ class LaserMatlabDataHelper:
     def poses(self):
         return self._poses
 
-    def get_pose_at(self, timestep):
+    def get_timestep_list(self):
+        return list(range(len(self.poses)))
+
+    def get_pose(self, timestep):
         return self._poses[timestep].T
 
-    def get_range_scan(self, timestamp):
-        range_scan = self._laser[0, timestamp]
+    def get_range_scan(self, timestep):
+        range_scan = self._laser[0, timestep]
         ranges = range_scan['ranges'][0]
         max_range = range_scan['maximum_range'][0][0]
         start_angle = range_scan['start_angle'][0][0]
@@ -39,8 +42,28 @@ class LaserMatlabDataHelper:
             'laser_offset': laser_offset
         }
 
+    def init_gridmap_from_data(self, gridmap):
+        pose_x_min = np.min(self._poses[:, 0])
+        pose_x_max = np.max(self._poses[:, 0])
+        pose_y_min = np.min(self._poses[:, 1])
+        pose_y_max = np.max(self._poses[:, 1])
+
+        map_borders = (pose_x_min-gridmap._border, pose_x_max+gridmap._border,
+                       pose_y_min-gridmap._border, pose_y_max+gridmap._border)
+
+        offset_x = map_borders[0]
+        offset_y = map_borders[2]
+        gridmap._offset = (offset_x, offset_y)
+
+        gridmap._map_size_meters = (map_borders[1]-offset_x, map_borders[3]-offset_y)
+        gridmap._map_size = tuple([math.ceil(dim/gridmap._grid_size) for dim in gridmap._map_size_meters])
+
+        log_odds_prior = GridMap.prob2log(gridmap._prior)
+        gridmap._grid_map = np.ones(gridmap._map_size).T * log_odds_prior
+
+
 class GridMap:
-    def __init__(self, laser_data='', grid_size=0.5, border=30):
+    def __init__(self, grid_size=0.5, border=30):
         # Default 
         self._prior = 0.5
         self._prob_occ = 0.9
@@ -53,31 +76,9 @@ class GridMap:
         self._map_size_meters = None
         self._map_size = None
         self._grid_map = None
-        self._laser = None
 
-        if laser_data:
-            self.init_laser_from_mat(laser_data)
-
-    def init_laser_from_mat(self, laser_filename):
-        self._laser = LaserMatlabDataHelper(laser_filename)
-
-        pose_x_min = np.min(self._laser.poses[:, 0])
-        pose_x_max = np.max(self._laser.poses[:, 0])
-        pose_y_min = np.min(self._laser.poses[:, 1])
-        pose_y_max = np.max(self._laser.poses[:, 1])
-
-        map_borders = (pose_x_min-self._border, pose_x_max+self._border,
-                       pose_y_min-self._border, pose_y_max+self._border)
-
-        offset_x = map_borders[0]
-        offset_y = map_borders[2]
-        self._offset = (offset_x, offset_y)
-
-        self._map_size_meters = (map_borders[1]-offset_x, map_borders[3]-offset_y)
-        self._map_size = tuple([math.ceil(dim/self._grid_size) for dim in self._map_size_meters])
-
-        log_odds_prior = GridMap.prob2log(self._prior)
-        self._grid_map = np.ones(self._map_size).T * log_odds_prior
+    def init_from_laserdata(self, laserdata):
+        laserdata.init_gridmap_from_data(self)
 
     def inv_sensor_model(self, scan, pose):
         map_update = np.zeros(self._grid_map.shape)
@@ -111,12 +112,9 @@ class GridMap:
 
         return map_update, robot_pose_map_frame, laser_end_map_frame
 
-    def update_at_timestep(self, timestep):
-        robot_pose = self._laser.get_pose_at(timestep)
-        scan = self._laser.get_range_scan(timestep)
-
+    def update(self, robot_pose, laser_scan):
         map_update, pose_map_frame, laser_map_frame = self.inv_sensor_model(
-            scan, robot_pose
+            laser_scan, robot_pose
         )
 
         log_odds_prior = GridMap.prob2log(self._prior)
@@ -125,9 +123,6 @@ class GridMap:
 
     def get_prob_map(self):
         return np.ones(self._grid_map.shape) - GridMap.log2prob(self._grid_map)
-
-    def get_timestep_list(self):
-        return list(range(len(self._laser.poses)))
 
     @staticmethod
     def laser_as_cartesian(rl, max_range=15):
