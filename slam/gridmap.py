@@ -1,7 +1,8 @@
 import math
 import numpy as np
 import scipy.io as sio
-from slam.utils import bresenham_line
+from slam.utils import (bresenham_line, prob2log, log2prob,
+    vector2transform2D, transform2vector2D)
 
 
 class LaserDataMatlab:
@@ -58,7 +59,7 @@ class LaserDataMatlab:
         gridmap._map_size_meters = (map_borders[1]-offset_x, map_borders[3]-offset_y)
         gridmap._map_size = tuple([math.ceil(dim/gridmap._grid_size) for dim in gridmap._map_size_meters])
 
-        log_odds_prior = GridMap.prob2log(gridmap._prior)
+        log_odds_prior = prob2log(gridmap._prior)
         gridmap._grid_map = np.ones(gridmap._map_size).T * log_odds_prior
 
 
@@ -83,7 +84,7 @@ class GridMap:
     def inv_sensor_model(self, scan, pose):
         map_update = np.zeros(self._grid_map.shape)
 
-        rob_trans = GridMap.vector2transform2D(pose)
+        rob_trans = vector2transform2D(pose)
         robot_pose_map_frame = GridMap.world_to_map_coordinates(
             pose[0:2, :], self._grid_size, self._offset
         )
@@ -105,10 +106,10 @@ class GridMap:
             for point in bres_points:
                 px, py = point
                 map_update[py, px] = self._grid_map[py, px] + \
-                    GridMap.prob2log(self._prob_free)
+                    prob2log(self._prob_free)
 
             map_update[py, px] = self._grid_map[py, px] + \
-                GridMap.prob2log(self._prob_occ)
+                prob2log(self._prob_occ)
 
         return map_update, robot_pose_map_frame, laser_end_map_frame
 
@@ -117,12 +118,12 @@ class GridMap:
             laser_scan, robot_pose
         )
 
-        log_odds_prior = GridMap.prob2log(self._prior)
+        log_odds_prior = prob2log(self._prior)
         map_update = map_update - log_odds_prior * np.ones(map_update.shape)
         self._grid_map = self._grid_map + map_update
 
     def get_prob_map(self):
-        return np.ones(self._grid_map.shape) - GridMap.log2prob(self._grid_map)
+        return np.ones(self._grid_map.shape) - log2prob(self._grid_map)
 
     @staticmethod
     def laser_as_cartesian(rl, max_range=15):
@@ -143,17 +144,9 @@ class GridMap:
             ranges * sn,
             np.ones( (1, len(angles)) )
         ])
-        transf = GridMap.vector2transform2D(rl['laser_offset'])
+        transf = vector2transform2D(rl['laser_offset'])
 
         return transf * points
-
-    @staticmethod
-    def log2prob(l):
-        return 1 - (1 / (1 + np.exp(l)))
-
-    @staticmethod
-    def prob2log(p):
-        return np.log(p / (1 - p))
 
     @staticmethod
     def world_to_map_coordinates(world_points, grid_size, offset):
@@ -168,23 +161,4 @@ class GridMap:
             ])
 
         return map_points
-
-    @staticmethod
-    def vector2transform2D(vector):
-        angle = vector.item(2)
-        cs = math.cos(angle)
-        sn = math.sin(angle)
-        return np.matrix([
-            [cs, -sn, vector.item(0)],
-            [sn, cs, vector.item(1)],
-            [0, 0, 1]
-        ])
-
-    @staticmethod
-    def transform2vector2D(t):
-        return np.matrix([
-            [t[0, 2]],
-            [t[1, 2]],
-            [np.arctan2(t[1, 0], t[0, 0])]
-        ])
 

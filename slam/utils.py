@@ -7,13 +7,39 @@ def normalize_angle(phi):
     return phi - 2*math.pi * math.floor((phi + math.pi) / (2*math.pi))
 
 
-# Zero mean
 def sample_normal_distribution(b):
     return np.random.normal(0, b, 1)[0]
 
 
 def sample_triangular_distribution(b):
     return b * random.uniform(-1, 1) * random.uniform(-1, 1)
+
+
+def log2prob(l):
+    return 1 - (1 / (1 + np.exp(l)))
+
+
+def prob2log(p):
+    return np.log(p / (1 - p))
+
+
+def vector2transform2D(vector):
+    angle = vector.item(2)
+    cs = math.cos(angle)
+    sn = math.sin(angle)
+    return np.matrix([
+        [cs, -sn, vector.item(0)],
+        [sn, cs, vector.item(1)],
+        [0, 0, 1]
+    ])
+
+
+def transform2vector2D(t):
+    return np.matrix([
+        [t[0, 2]],
+        [t[1, 2]],
+        [np.arctan2(t[1, 0], t[0, 0])]
+    ])
 
 
 def bresenham_line(start, end):
