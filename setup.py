@@ -1,10 +1,9 @@
-from setuptools import setup
+from distutils.core import setup
+from catkin_pkg.python_setup import generate_distutils_setup
 
-setup(
-    name='slam-algorithms',
+setup_args = generate_distutils_setup(
     packages=['slam'],
-    include_package_data=True,
-    install_requires=[
-    ]
+    package_dir={'': 'src'},
 )
 
+setup(**setup_args)
