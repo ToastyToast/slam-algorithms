@@ -22,11 +22,13 @@ def gridmap_publisher():
 
     # Gridmap 
     laser_data = LaserDataMatlab(sys.argv[1])
-    gridmap = GridMap(grid_size=0.3)
+    gridmap = GridMap(grid_size=0.1)
     gridmap.init_from_laserdata(laser_data)
 
     # Setup ros message
-    timesteps = timestep_gen(laser_data.get_timestep_list())
+    timestep_list = laser_data.get_timestep_list()
+    timesteps = timestep_gen(timestep_list)
+    timestep_len = len(timestep_list)
 
     map_meta = MapMetaData()
     # map_meta.map_load_time = rospy.Time().now()
@@ -40,19 +42,20 @@ def gridmap_publisher():
     # Height = rows
     map_meta.height = grid_map.shape[0]
 
-    map_meta.origin.position.x = 0
-    map_meta.origin.position.y = 0
+    map_meta.origin.position.x = gridmap._offset[1]
+    map_meta.origin.position.y = gridmap._offset[0]
     map_meta.origin.position.z = 0
 
     rate = rospy.Rate(10)
     while not rospy.is_shutdown():
+        robot_pose = None
         try:
-            t = timesteps.next()
+            t = next(timesteps)
             robot_pose = laser_data.get_pose(t)
             range_scan = laser_data.get_range_scan(t)
             gridmap.update(robot_pose, range_scan)
         except StopIteration:
-            pass
+            robot_pose = laser_data.get_pose(timestep_len-1)
 
         grid_map = gridmap.get_prob_map().T * 100
         grid_map = grid_map.astype(np.int8)
