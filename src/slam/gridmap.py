@@ -60,7 +60,7 @@ class LaserDataMatlab:
         gridmap._map_size = tuple([math.ceil(dim/gridmap._grid_size) for dim in gridmap._map_size_meters])
 
         log_odds_prior = prob2log(gridmap._prior)
-        gridmap._grid_map = np.ones(gridmap._map_size).T * log_odds_prior
+        gridmap._grid_map = np.ones(gridmap._map_size) * log_odds_prior
 
 
 class GridMap:
@@ -105,10 +105,10 @@ class GridMap:
             bres_points = bresenham_line((rx, ry), (lx, ly))
             for point in bres_points:
                 px, py = point
-                map_update[py, px] = self._grid_map[py, px] + \
+                map_update[px, py] = self._grid_map[px, py] + \
                     prob2log(self._prob_free)
 
-            map_update[py, px] = self._grid_map[py, px] + \
+            map_update[px, py] = self._grid_map[px, py] + \
                 prob2log(self._prob_occ)
 
         return map_update, robot_pose_map_frame, laser_end_map_frame
