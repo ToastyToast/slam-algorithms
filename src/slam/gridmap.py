@@ -125,6 +125,48 @@ class GridMap:
     def get_prob_map(self):
         return np.ones(self._grid_map.shape) - log2prob(self._grid_map)
 
+    def raycast(self, pose, scan_endpoints, occ_prob):
+        prob_map = self.get_prob_map()
+        pose_transf = vector2transform2D(pose)
+        scan_endpoints = pose_transf * scan_endpoints
+
+        pose_map = GridMap.world_to_map_coordinates(
+            pose[0:2, :], self._grid_size, self._offset
+        )
+
+        scan_endpoints_map = GridMap.world_to_map_coordinates(
+            scan_endpoints[0:2, :], self._grid_size, self._offset
+        )
+
+        log_odds = prob2log(occ_prob)
+        result = []
+        rx = int(pose_map.item(0))
+        ry = int(pose_map.item(1))
+        for col in range(scan_endpoints_map.shape[1]):
+            lx = int(scan_endpoints_map.item((0, col)))
+            ly = int(scan_endpoints_map.item((1, col)))
+            bres_points = bresenham_line((rx, ry), (lx, ly))
+            last_point = None
+            for point in bres_points:
+                px, py = point
+                last_point = point
+                if self._grid_map[px, py] >= log_odds:
+                    break
+            result.append(last_point)
+
+        return result
+
+    @staticmethod
+    def generate_laser_scan(max_range, num_beams, start_angle, angular_res):
+        angles = np.linspace(start_angle, start_angle + angular_res * num_beams, num_beams)
+        endpoints = np.vstack([
+            max_range * np.cos(angles),
+            max_range * np.sin(angles),
+            np.ones( (1, len(angles)) )
+        ])
+
+        return endpoints
+
     @staticmethod
     def laser_as_cartesian(rl, max_range=15):
         ranges = rl['ranges']
