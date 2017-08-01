@@ -18,7 +18,8 @@ def timestep_gen(timesteps):
 
 
 def gridmap_publisher():
-    gridmap_pub = rospy.Publisher('gridmap', OccupancyGrid, queue_size=10)
+    gridmap_pub = rospy.Publisher('gridmap', OccupancyGrid, queue_size=1)
+    pose_pub = rospy.Publisher('pose', geometry_msgs.msg.PoseStamped, queue_size=10)
     rospy.init_node('gridmap_publisher', sys.argv)
     rospy.loginfo('Initialized gridmap_publisher')
 
@@ -62,6 +63,10 @@ def gridmap_publisher():
     rx = 0 - gridmap._offset[0]
     ry = 0 - gridmap._offset[1]
     rtheta = 0
+
+    pose_msg = geometry_msgs.msg.PoseStamped()
+    pose_msg.header.frame_id = 'map'
+
     while not rospy.is_shutdown():
         robot_pose = None
         range_scan = None
@@ -72,7 +77,7 @@ def gridmap_publisher():
             gridmap.update(robot_pose, range_scan)
         except StopIteration:
             robot_pose = laser_data.get_pose(timestep_len-1)
-            range_scan = laser_data.get_range_scan(timestep_len-1))
+            range_scan = laser_data.get_range_scan(timestep_len-1)
 
         grid_map = gridmap.get_prob_map() * 100
         grid_map = grid_map.astype(np.int8)
@@ -95,6 +100,19 @@ def gridmap_publisher():
         rbase_tf.transform.rotation.w = quat[3]
 
         pose_tf_br.sendTransform(rbase_tf)
+
+        pose_msg.header.stamp = rospy.Time.now()
+        pose_msg.pose.position.x = rx
+        pose_msg.pose.position.y = ry
+        pose_msg.pose.position.z = 0
+
+        pose_quat = tf.transformations.quaternion_from_euler(0, 0, rtheta)
+        pose_msg.pose.orientation.x = pose_quat[0]
+        pose_msg.pose.orientation.y = pose_quat[1]
+        pose_msg.pose.orientation.z = pose_quat[2]
+        pose_msg.pose.orientation.w = pose_quat[3]
+
+        pose_pub.publish(pose_msg)
 
         h = Header()
         h.stamp = rospy.Time.now()
