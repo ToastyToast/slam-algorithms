@@ -44,8 +44,8 @@ def gridmap_publisher():
     # Height = rows
     map_meta.height = grid_map.shape[0]
 
-    map_meta.origin.position.x = gridmap._offset[0]
-    map_meta.origin.position.y = gridmap._offset[1]
+    map_meta.origin.position.x = 0
+    map_meta.origin.position.y = 0
     map_meta.origin.position.z = 0
 
     # Broadcast robot transform
@@ -58,6 +58,11 @@ def gridmap_publisher():
     rbase_tf.child_frame_id = 'robot_base'
 
     rate = rospy.Rate(10)
+
+    rx = 0 - gridmap._offset[1]
+    ry = 0 - gridmap._offset[0]
+    rtheta = 0
+    print(rx, ry, rtheta)
     while not rospy.is_shutdown():
         robot_pose = None
         try:
@@ -71,8 +76,8 @@ def gridmap_publisher():
         grid_map = gridmap.get_prob_map() * 100
         grid_map = grid_map.astype(np.int8)
 
-        rx = robot_pose.item(0)
-        ry = robot_pose.item(1)
+        rx = robot_pose.item(1) - gridmap._offset[1]
+        ry = robot_pose.item(0) - gridmap._offset[0]
         rtheta = robot_pose.item(2)
 
         rospy.loginfo('%s %s %s', rx, ry, rtheta)
