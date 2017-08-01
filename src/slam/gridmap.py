@@ -139,9 +139,11 @@ class GridMap:
         )
 
         log_odds = prob2log(occ_prob)
-        result = []
+        result_x = np.zeros(scan_endpoints_map.shape[1])
+        result_y = np.zeros(scan_endpoints_map.shape[1])
         rx = int(pose_map.item(0))
         ry = int(pose_map.item(1))
+        print(scan_endpoints.shape)
         for col in range(scan_endpoints_map.shape[1]):
             lx = int(scan_endpoints_map.item((0, col)))
             ly = int(scan_endpoints_map.item((1, col)))
@@ -152,9 +154,10 @@ class GridMap:
                 last_point = point
                 if self._grid_map[px, py] >= log_odds:
                     break
-            result.append(last_point)
+            result_x[col] = last_point[0]
+            result_y[col] = last_point[1]
 
-        return result
+        return np.vstack([result_x, result_y])
 
     @staticmethod
     def generate_laser_scan(max_range, num_beams, start_angle, angular_res):
@@ -166,6 +169,28 @@ class GridMap:
         ])
 
         return endpoints
+
+    @staticmethod
+    def calculate_scan_mse(scan1_map_end, scan2_map_end):
+        if scan1_map_end.shape[1] != scan2_map_end.shape[1]:
+            raise ValueError('Scans must have equal number of endpoints')
+        result = 0.0
+        diffs = np.matrix([])
+        m = scan1_map_end.shape[1]
+        for col in range(m):
+            lx1 = int(scan1_map_end.item((0, col)))
+            ly1 = int(scan1_map_end.item((1, col)))
+            lx2 = int(scan2_map_end.item((0, col)))
+            ly2 = int(scan2_map_end.item((1, col)))
+
+            point_diff = np.matrix([
+                lx1 - lx2,
+                ly2 - ly2
+            ]).T
+
+            diffs = np.concatenate((diffs, point_diff)) if diffs.size else np.copy(point_diff)
+
+        return np.asscalar(diffs.T * diffs) / (2 * m)
 
     @staticmethod
     def laser_as_cartesian(rl, max_range=15):
