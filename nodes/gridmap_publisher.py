@@ -59,12 +59,12 @@ def gridmap_publisher():
 
     rate = rospy.Rate(10)
 
-    rx = 0 - gridmap._offset[1]
-    ry = 0 - gridmap._offset[0]
+    rx = 0 - gridmap._offset[0]
+    ry = 0 - gridmap._offset[1]
     rtheta = 0
-    print(rx, ry, rtheta)
     while not rospy.is_shutdown():
         robot_pose = None
+        range_scan = None
         try:
             t = next(timesteps)
             robot_pose = laser_data.get_pose(t)
@@ -72,16 +72,18 @@ def gridmap_publisher():
             gridmap.update(robot_pose, range_scan)
         except StopIteration:
             robot_pose = laser_data.get_pose(timestep_len-1)
+            range_scan = laser_data.get_range_scan(timestep_len-1))
 
         grid_map = gridmap.get_prob_map() * 100
         grid_map = grid_map.astype(np.int8)
 
-        rx = robot_pose.item(1) - gridmap._offset[1]
-        ry = robot_pose.item(0) - gridmap._offset[0]
+        rx = robot_pose.item(0) - gridmap._offset[0]
+        ry = robot_pose.item(1) - gridmap._offset[1]
         rtheta = robot_pose.item(2)
 
         rospy.loginfo('%s %s %s', rx, ry, rtheta)
 
+        rbase_tf.header.stamp = rospy.Time.now()
         rbase_tf.transform.translation.x = rx
         rbase_tf.transform.translation.y = ry
         rbase_tf.transform.translation.z = 0
