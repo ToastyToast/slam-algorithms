@@ -3,6 +3,6 @@
         args="0 0 0 0 0 0 world map" />
     <node name="gridmap_publisher" pkg="slam_algorithms"
         type="gridmap_publisher.py" respawn="false" output="screen"
-        args="/home/toast/ros_ws/catkin_ws/src/slam_algorithms/examples/data/laser_struct.mat"
+        args="$(find slam_algorithms)/examples/data/laser_struct.mat"
     />
 </launch>

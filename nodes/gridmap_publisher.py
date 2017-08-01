@@ -9,6 +9,7 @@ import tf, tf2_ros
 import geometry_msgs.msg
 from std_msgs.msg import Header
 from nav_msgs.msg import OccupancyGrid, MapMetaData
+from sensor_msgs.msg import LaserScan
 from rospy.numpy_msg import numpy_msg
 
 
@@ -20,6 +21,7 @@ def timestep_gen(timesteps):
 def gridmap_publisher():
     gridmap_pub = rospy.Publisher('gridmap', OccupancyGrid, queue_size=1)
     pose_pub = rospy.Publisher('pose', geometry_msgs.msg.PoseStamped, queue_size=10)
+    scan_pub = rospy.Publisher('scan', LaserScan, queue_size=10)
     rospy.init_node('gridmap_publisher', sys.argv)
     rospy.loginfo('Initialized gridmap_publisher')
 
@@ -67,9 +69,24 @@ def gridmap_publisher():
     pose_msg = geometry_msgs.msg.PoseStamped()
     pose_msg.header.frame_id = 'map'
 
+    scan_msg = LaserScan()
+    scan_msg.header.frame_id = 'robot_base'
+
+    # Get info about laser scan
+    laser_scan_temp = laser_data.get_range_scan(0)
+
+    # This info doesn't change
+    start_angle = laser_scan_temp['start_angle']
+    angular_resolution = laser_scan_temp['angular_resolution']
+
+    scan_msg.angle_min = start_angle
+    scan_msg.angle_increment = angular_resolution
+    scan_msg.range_min = 0
+    scan_msg.time_increment = 0
+
+    robot_pose = None
+    range_scan = None
     while not rospy.is_shutdown():
-        robot_pose = None
-        range_scan = None
         try:
             t = next(timesteps)
             robot_pose = laser_data.get_pose(t)
@@ -86,9 +103,7 @@ def gridmap_publisher():
         ry = robot_pose.item(1) - gridmap._offset[1]
         rtheta = robot_pose.item(2)
 
-        rospy.loginfo('%s %s %s', rx, ry, rtheta)
-
-        rbase_tf.header.stamp = rospy.Time.now()
+        # Robot_base transform 
         rbase_tf.transform.translation.x = rx
         rbase_tf.transform.translation.y = ry
         rbase_tf.transform.translation.z = 0
@@ -99,9 +114,7 @@ def gridmap_publisher():
         rbase_tf.transform.rotation.z = quat[2]
         rbase_tf.transform.rotation.w = quat[3]
 
-        pose_tf_br.sendTransform(rbase_tf)
-
-        pose_msg.header.stamp = rospy.Time.now()
+        # Robot pose 
         pose_msg.pose.position.x = rx
         pose_msg.pose.position.y = ry
         pose_msg.pose.position.z = 0
@@ -112,7 +125,29 @@ def gridmap_publisher():
         pose_msg.pose.orientation.z = pose_quat[2]
         pose_msg.pose.orientation.w = pose_quat[3]
 
+        # Laser scan
+        # Get changing info from current scan
+        num_beams = len(range_scan['ranges'])
+        max_range = range_scan['maximum_range']
+        laser_ranges = range_scan['ranges']
+
+        valid_endpoints = (laser_ranges < max_range) & (laser_ranges > 0)
+        laser_ranges = laser_ranges[valid_endpoints]
+
+        scan_msg.angle_max = start_angle + num_beams * angular_resolution
+        scan_msg.range_max = max_range
+        scan_msg.ranges = laser_ranges
+        scan_msg.time_increment = (1/50) / num_beams
+        scan_msg.scan_time = rospy.Time.now().nsecs - scan_msg.scan_time
+
+        # Publish everything
+        rbase_tf.header.stamp = rospy.Time.now()
+        pose_msg.header.stamp = rospy.Time.now()
+        scan_msg.header.stamp = rospy.Time.now()
+
+        pose_tf_br.sendTransform(rbase_tf)
         pose_pub.publish(pose_msg)
+        scan_pub.publish(scan_msg)
 
         h = Header()
         h.stamp = rospy.Time.now()
