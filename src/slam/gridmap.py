@@ -105,10 +105,10 @@ class GridMap:
             bres_points = bresenham_line((rx, ry), (lx, ly))
             for point in bres_points:
                 px, py = point
-                map_update[px, py] = self._grid_map[px, py] + \
+                map_update[py, px] = self._grid_map[py, px] + \
                     prob2log(self._prob_free)
 
-            map_update[px, py] = self._grid_map[px, py] + \
+            map_update[py, px] = self._grid_map[py, px] + \
                 prob2log(self._prob_occ)
 
         return map_update, robot_pose_map_frame, laser_end_map_frame
@@ -143,7 +143,6 @@ class GridMap:
         result_y = np.zeros(scan_endpoints_map.shape[1])
         rx = int(pose_map.item(0))
         ry = int(pose_map.item(1))
-        print(scan_endpoints.shape)
         for col in range(scan_endpoints_map.shape[1]):
             lx = int(scan_endpoints_map.item((0, col)))
             ly = int(scan_endpoints_map.item((1, col)))
@@ -152,7 +151,7 @@ class GridMap:
             for point in bres_points:
                 px, py = point
                 last_point = point
-                if self._grid_map[px, py] >= log_odds:
+                if self._grid_map[py, px] >= log_odds:
                     break
             result_x[col] = last_point[0]
             result_y[col] = last_point[1]
