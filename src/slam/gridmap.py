@@ -78,6 +78,14 @@ class GridMap:
         self._map_size = None
         self._grid_map = None
 
+    def init_gridmap(self, map_size):
+        self._offset = (map_size[0]/2.0, map_size[1]/2.0)
+        self._map_size_meters = map_size
+        self._map_size = tuple([math.ceil(dim/self._grid_size) for dim in self._map_size_meters])
+
+        log_odds_prior = prob2log(self._prior)
+        self._grid_map = np.ones(self._map_size) * log_odds_prior
+
     def init_from_laserdata(self, laserdata):
         laserdata.init_gridmap_from_data(self)
 
