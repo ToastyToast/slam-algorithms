@@ -36,8 +36,8 @@ def best_fit_transform(A, B):
     assert len(A) == len(B)
 
     # translate points to their centroids
-    centroid_A = np.mean(A, axis=0)
-    centroid_B = np.mean(B, axis=0)
+    centroid_A = np.array(np.mean(A, axis=0)).flatten()
+    centroid_B = np.array(np.mean(B, axis=0)).flatten()
     AA = A - centroid_A
     BB = B - centroid_B
 
