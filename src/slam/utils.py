@@ -43,7 +43,7 @@ def transform2vector2D(t):
 
 
 def bresenham_line(start, end):
-	# Copy/paste from roguebasin
+    # Copy/paste from roguebasin
     # Setup initial conditions
     x1, y1 = start
     x2, y2 = end
